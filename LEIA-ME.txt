@@ -1,0 +1,57 @@
+MINHAS CONTAS - como publicar (GitHub -> Netlify + Firebase)
+============================================================
+
+ARQUIVOS
+  index.html            o aplicativo
+  firebase-config.js    onde você cola a configuração do Firebase
+  manifest.webmanifest  permite instalar na tela inicial do celular
+  sw.js                 deixa o app abrir mesmo sem internet
+  icon-*.png            ícones do app
+  netlify.toml          configuração do Netlify (não precisa mexer)
+  firestore.rules       regras de segurança para colar no Firebase
+
+1) FIREBASE (nuvem e login)
+  a. console.firebase.google.com > Adicionar projeto > nome: minhas-contas
+     (pode desativar o Google Analytics).
+  b. Menu Criação > Authentication > Vamos começar > aba "Método de login"
+     > E-mail/senha > Ativar > Salvar.
+  c. Menu Criação > Firestore Database > Criar banco de dados
+     > local: southamerica-east1 (São Paulo) > modo de produção > Criar.
+  d. No Firestore, aba "Regras": apague tudo, cole o conteúdo do arquivo
+     firestore.rules e clique em Publicar.
+  e. Engrenagem (Configurações do projeto) > Seus apps > ícone </> (Web)
+     > apelido: minhas-contas > Registrar app.
+     Copie os valores de apiKey, authDomain, projectId, storageBucket,
+     messagingSenderId e appId para dentro do firebase-config.js.
+
+2) GITHUB
+  a. github.com > New repository > nome: minhas-contas > Private > Create.
+  b. "uploading an existing file" > arraste TODOS os arquivos desta pasta
+     (não a pasta em si) > Commit changes.
+
+3) NETLIFY
+  a. app.netlify.com > Add new site > Import an existing project > GitHub.
+  b. Escolha o repositório minhas-contas.
+  c. Build command: deixe vazio. Publish directory: deixe vazio (ou ".").
+  d. Deploy. Em Site configuration > Change site name, coloque por exemplo
+     minhascontas-seunome  ->  https://minhascontas-seunome.netlify.app
+
+4) FIREBASE - liberar o domínio do Netlify
+  Authentication > Configurações > Domínios autorizados > Adicionar domínio
+  > cole minhascontas-seunome.netlify.app (sem https://).
+
+5) NO CELULAR
+  a. Abra o link no Chrome (Android) ou Safari (iPhone).
+  b. Toque em "Criar conta" com seu e-mail e uma senha (mínimo 6 caracteres).
+     Nas próximas vezes, use "Entrar".
+  c. Android: menu ⋮ > Adicionar à tela inicial / Instalar app.
+     iPhone: botão Compartilhar > Adicionar à Tela de Início.
+
+ATUALIZAR DEPOIS
+  Substitua o arquivo no GitHub (Add file > Upload files) e o Netlify
+  publica sozinho em cerca de 1 minuto. Os dados não se perdem, porque
+  ficam no Firebase.
+
+BACKUP
+  No fim da tela há "Exportar backup" (baixa um arquivo .json com tudo)
+  e "Importar backup". Vale exportar de vez em quando.
