@@ -113,6 +113,9 @@ section{margin-top:26px}
 
 .debt{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
 .debt-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.amt-btn{border:0;background:transparent;padding:8px 0 8px 8px;color:inherit;font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:1rem;white-space:nowrap}
+.amt-btn small{color:var(--ink-2);font-size:.85em;margin-left:3px}
+.tp.fixa{background:var(--gold-soft)!important;color:var(--ink)!important}
 .debt .tp{display:inline-block;font-size:.78rem;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--surface-2);color:var(--ink-2);margin-top:4px}
 .prog{height:8px;background:var(--bar-free);border-radius:99px;overflow:hidden;margin:12px 0 8px}
 .prog i{display:block;height:100%;background:var(--bar-used);border-radius:99px}
@@ -362,11 +365,13 @@ dialog[open]{animation:up .22s ease-out}
       <select id="iTipo"></select>
     </div>
     <div class="field"><span class="lab">Forma de pagamento</span>
-      <div class="seg" id="segForma">
-        <button type="button" data-v="vista" aria-pressed="true">À vista (1x)</button>
+      <div class="seg" id="segForma" style="grid-template-columns:repeat(3,1fr)">
+        <button type="button" data-v="vista" aria-pressed="true">À vista</button>
         <button type="button" data-v="parcelado" aria-pressed="false">Parcelado</button>
+        <button type="button" data-v="fixa" aria-pressed="false">Todo mês</button>
       </div>
     </div>
+    <p class="calc" id="fixaHint" hidden>Repete sozinha todo mês, sem precisar cadastrar de novo. Se o valor mudar em algum mês (luz, água), toque no valor na lista do mês para ajustar.</p>
     <div class="field" id="boxParc" hidden><label for="iParc">Quantas parcelas</label><input id="iParc" type="number" inputmode="numeric" min="2" max="480" value="2"></div>
     <div class="field" id="boxModo" hidden><span class="lab">O valor que vou digitar é</span>
       <div class="seg" id="segModo">
@@ -492,6 +497,7 @@ dialog[open]{animation:up .22s ease-out}
   function normalize(s){
     const o = {salario:0,cofre:0,cofreMov:[],dividas:[],...(s||{})};
     o.dividas = (o.dividas||[]).map(d=>({...d, pagas:Array.isArray(d.pagas)?d.pagas.slice():[]}));
+    o.dividas.forEach(d=>{ if (typeof d.recorrente!=="boolean") d.recorrente = d.tipo==="Conta fixa"; if (d.valores && typeof d.valores==="object") d.valores={...d.valores}; });
     o.cofreMov = (o.cofreMov||[]).slice();
     o.fontes = Array.isArray(o.fontes) ? o.fontes.map(f=>({...f})) : [];
     o.rendaMes = (o.rendaMes && typeof o.rendaMes==="object") ? JSON.parse(JSON.stringify(o.rendaMes)) : {};
@@ -501,25 +507,30 @@ dialog[open]{animation:up .22s ease-out}
   }
 
   /* ---------- cálculos ---------- */
+  const isRec = d => !!d.recorrente;
+  const valorDe = (d,i) => (d.valores && d.valores[i]!=null) ? d.valores[i] : d.valorParcela;
+  const fimIdx = d => { if (!d.fim) return Infinity; const {y:fy,m:fm}=parseD(d.primeiro); const [ey,em]=d.fim.split("-").map(Number); return (ey-fy)*12+(em-1-fm); };
+  const nParc = d => isRec(d) ? fimIdx(d)+1 : d.parcelas;
+  const idxHoje = d => { const t=new Date(), {y,m}=parseD(d.primeiro); return (t.getFullYear()-y)*12+(t.getMonth()-m); };
   function installmentsIn(y,m){
     const out=[];
     for (const d of state.dividas){
       const {y:fy,m:fm} = parseD(d.primeiro);
       const i = (y-fy)*12 + (m-fm);
-      if (i>=0 && i<d.parcelas) out.push({d, i, due:dueOf(d.primeiro,i), paid:d.pagas.includes(i)});
+      if (i>=0 && i<nParc(d)) out.push({d, i, due:dueOf(d.primeiro,i), paid:d.pagas.includes(i), v:valorDe(d,i)});
     }
     return out.sort((a,b)=>a.due-b.due);
   }
   function lateList(){
     const t=today0(), out=[];
-    for (const d of state.dividas) for (let i=0;i<d.parcelas;i++){
+    for (const d of state.dividas) for (let i=0;i<Math.min(nParc(d),1200);i++){
       const due=dueOf(d.primeiro,i);
       if (due>=t) break;
-      if (!d.pagas.includes(i)) out.push({d,i,due});
+      if (!d.pagas.includes(i)) out.push({d,i,due,v:valorDe(d,i)});
     }
     return out;
   }
-  const restante = d => (d.parcelas - d.pagas.length) * d.valorParcela;
+  const restante = d => isRec(d) ? 0 : (d.parcelas - d.pagas.length) * d.valorParcela;
 
   /* ---------- salários ---------- */
   const ym = (y,m) => `${y}-${String(m+1).padStart(2,"0")}`;
@@ -542,8 +553,8 @@ dialog[open]{animation:up .22s ease-out}
     const lbl = new Date(view.y,view.m,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
     $("monthLbl").textContent = lbl.replace(" de "," ");
     const items = installmentsIn(view.y,view.m);
-    const totalMes = items.reduce((s,x)=>s+x.d.valorParcela,0);
-    const pagoMes = items.filter(x=>x.paid).reduce((s,x)=>s+x.d.valorParcela,0);
+    const totalMes = items.reduce((s,x)=>s+x.v,0);
+    const pagoMes = items.filter(x=>x.paid).reduce((s,x)=>s+x.v,0);
     const rt = rendaTotal(view.y,view.m), renda = rt.total;
     const sobra = renda - totalMes;
     $("sobra").textContent = fmt(sobra);
@@ -563,7 +574,7 @@ dialog[open]{animation:up .22s ease-out}
     const late = lateList();
     const al = $("alert");
     if (late.length){
-      const tot = late.reduce((s,x)=>s+x.d.valorParcela,0);
+      const tot = late.reduce((s,x)=>s+x.v,0);
       al.textContent = (late.length===1?"1 parcela atrasada, ":late.length+" parcelas atrasadas, ")+"somando "+fmt(tot)+".";
       al.classList.add("on");
     } else al.classList.remove("on");
@@ -576,14 +587,14 @@ dialog[open]{animation:up .22s ease-out}
       const t=today0();
       ml.innerHTML = items.map(x=>{
         const isLate = !x.paid && x.due<t;
-        const parc = x.d.parcelas>1 ? `<span>Parcela ${x.i+1}/${x.d.parcelas}</span>` : "";
+        const parc = isRec(x.d) ? `<span>Todo mês</span>` : x.d.parcelas>1 ? `<span>Parcela ${x.i+1}/${x.d.parcelas}</span>` : "";
         return `<div class="row ${x.paid?"paid":""} ${isLate?"late":""}">
           <button class="check" data-pay="${x.d.id}" data-i="${x.i}" aria-label="${x.paid?"Desmarcar pagamento de":"Marcar como paga:"} ${esc(x.d.nome)}" aria-pressed="${x.paid}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
           </button>
           <div><div class="nm">${esc(x.d.nome)}</div>
             <div class="meta"><span>${esc(x.d.tipo)}</span>${parc}<span class="${isLate?"late-tag":""}">${isLate?"Venceu ":"Vence "}${dfmt(x.due)}</span></div></div>
-          <div class="amt">${fmt(x.d.valorParcela)}</div>
+          ${isRec(x.d) ? `<button class="amt-btn" data-val="${x.d.id}" data-i="${x.i}" aria-label="Alterar valor deste mês de ${esc(x.d.nome)}">${fmt(x.v)}<small>✎</small></button>` : `<div class="amt">${fmt(x.v)}</div>`}
         </div>`;
       }).join("");
     }
@@ -602,6 +613,29 @@ dialog[open]{animation:up .22s ease-out}
       $("emptyAdd").onclick = () => openDebt();
     } else {
       dl.innerHTML = lista.map(d=>{
+        if (isRec(d)){
+          const hoje = ym(new Date().getFullYear(), new Date().getMonth());
+          const encerrada = d.fim && d.fim < hoje;
+          let prox=""; const ini=Math.max(0, Math.min(idxHoje(d), 1200));
+          for (let i=Math.max(0,ini-1); i<Math.min(nParc(d), ini+24); i++){ if(!d.pagas.includes(i)){ prox=dfmtY(dueOf(d.primeiro,i)); break; } }
+          const desde = new Date(parseD(d.primeiro).y, parseD(d.primeiro).m, 1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+          const fimTxt = d.fim ? new Date(Number(d.fim.slice(0,4)), Number(d.fim.slice(5))-1, 1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"}) : "";
+          return `<article class="debt">
+          <div class="debt-top">
+            <div><div class="nm">${esc(d.nome)}</div><span class="tp fixa">${esc(d.tipo)} · todo mês</span></div>
+            <div style="text-align:right"><div class="amt">${fmt(d.valorParcela)}</div><div class="meta" style="justify-content:flex-end">por mês</div></div>
+          </div>
+          <div class="debt-foot" style="margin-top:10px">
+            <span>${encerrada?`<b>Encerrada</b> em ${fimTxt}`:d.fim?`Repete até <b>${fimTxt}</b>`:`Repete todo mês desde ${desde}`}</span>
+          </div>
+          ${prox&&!encerrada?`<div class="debt-foot" style="margin-top:4px"><span>Próximo vencimento: <b>${prox}</b></span></div>`:""}
+          <div class="debt-actions">
+            <button class="ghost" data-edit="${d.id}">Editar</button>
+            <button class="ghost" data-stop="${d.id}">${d.fim?"Reativar":"Encerrar"}</button>
+            <button class="ghost danger" data-del="${d.id}">Excluir</button>
+          </div>
+        </article>`;
+        }
         const pagas=d.pagas.length, done=pagas>=d.parcelas;
         let prox="";
         if (!done){ for(let i=0;i<d.parcelas;i++){ if(!d.pagas.includes(i)){ prox=dfmtY(dueOf(d.primeiro,i)); break; } } }
@@ -640,7 +674,7 @@ dialog[open]{animation:up .22s ease-out}
     let y=view.y, m=view.m, cofre=state.cofre;
     for (let k=0;k<12;k++){
       const renda = rendaTotal(y,m).total;
-      const contas = installmentsIn(y,m).reduce((s,x)=>s+x.d.valorParcela,0);
+      const contas = installmentsIn(y,m).reduce((s,x)=>s+x.v,0);
       const alvo = renda*meta;
       const guardar = Math.min(alvo, Math.max(0, renda-contas));
       const livre = Math.max(0, renda-contas-guardar);
@@ -786,6 +820,31 @@ dialog[open]{animation:up .22s ease-out}
       persist(); render(); return;
     }
     const ed = e.target.closest("[data-edit]"); if (ed){ openDebt(ed.dataset.edit); return; }
+    const vb = e.target.closest("[data-val]");
+    if (vb){
+      const d = state.dividas.find(x=>x.id===vb.dataset.val); const i=Number(vb.dataset.i);
+      if (!d) return;
+      const due = dueOf(d.primeiro,i);
+      const mes = due.toLocaleDateString("pt-BR",{month:"long"});
+      const resp = prompt(`Valor de ${mes} para “${d.nome}”:`, moneyIn(valorDe(d,i)));
+      if (resp===null) return;
+      const v = parseMoney(resp);
+      if (!(v>=0)) { alert("Valor inválido. Use o formato 150,00."); return; }
+      d.valores = d.valores || {};
+      if (Math.abs(v-d.valorParcela)<0.005) delete d.valores[i]; else d.valores[i] = Math.round(v*100)/100;
+      persist(); render(); toast("Valor de "+mes+" atualizado");
+      return;
+    }
+    const st = e.target.closest("[data-stop]");
+    if (st){
+      const d = state.dividas.find(x=>x.id===st.dataset.stop); if (!d) return;
+      if (d.fim){ delete d.fim; persist(); render(); toast("Conta reativada"); return; }
+      const t=new Date();
+      if (!confirm(`Parar de repetir “${d.nome}”? Ela continua até ${t.toLocaleDateString("pt-BR",{month:"long"})} e some dos meses seguintes.`)) return;
+      d.fim = ym(t.getFullYear(), t.getMonth());
+      persist(); render(); toast("Conta encerrada");
+      return;
+    }
     const del = e.target.closest("[data-del]");
     if (del){
       const d = state.dividas.find(x=>x.id===del.dataset.del);
@@ -815,13 +874,15 @@ dialog[open]{animation:up .22s ease-out}
   $("iTipo").innerHTML = TIPOS.map(t=>`<option>${t}</option>`).join("");
   let editId = null;
   seg($("segForma"), updForm);
+  $("iTipo").addEventListener("change", ()=>{ if ($("iTipo").value==="Conta fixa"){ segSet($("segForma"),"fixa"); updForm(); } });
   seg($("segModo"), updForm);
   ["iParc","iValor","iPagas"].forEach(id=>$(id).addEventListener("input", updCalc));
   function updForm(){
-    const parc = segVal($("segForma"))==="parcelado";
+    const forma = segVal($("segForma")), parc = forma==="parcelado", fixa = forma==="fixa";
     $("boxParc").hidden = !parc; $("boxModo").hidden = !parc; $("boxPagas").hidden = !parc;
-    $("lValor").textContent = !parc ? "Valor" : (segVal($("segModo"))==="total" ? "Valor total" : "Valor de cada parcela");
-    $("lVenc").textContent = parc ? "Vencimento da 1ª parcela" : "Vencimento";
+    $("fixaHint").hidden = !fixa;
+    $("lValor").textContent = fixa ? "Valor mensal" : !parc ? "Valor" : (segVal($("segModo"))==="total" ? "Valor total" : "Valor de cada parcela");
+    $("lVenc").textContent = parc ? "Vencimento da 1ª parcela" : fixa ? "Primeiro vencimento" : "Vencimento";
     updCalc();
   }
   function updCalc(){
@@ -841,7 +902,7 @@ dialog[open]{animation:up .22s ease-out}
     $("errDebt").textContent = "";
     $("iNome").value = d?d.nome:"";
     $("iTipo").value = d?d.tipo:TIPOS[0];
-    segSet($("segForma"), d && d.parcelas>1 ? "parcelado" : "vista");
+    segSet($("segForma"), d ? (isRec(d) ? "fixa" : d.parcelas>1 ? "parcelado" : "vista") : "vista");
     segSet($("segModo"), "parcela");
     if (!d) segSet($("segModo"), "total");
     $("iParc").value = d && d.parcelas>1 ? d.parcelas : 2;
@@ -860,7 +921,7 @@ dialog[open]{animation:up .22s ease-out}
     const err = m => { $("errDebt").textContent=m; };
     const nome = $("iNome").value.trim();
     if (!nome) return err("Dê um nome para a dívida.");
-    const parc = segVal($("segForma"))==="parcelado";
+    const parc = segVal($("segForma"))==="parcelado", fixa = segVal($("segForma"))==="fixa";
     const n = parc ? parseInt($("iParc").value,10) : 1;
     if (parc && !(n>=2 && n<=480)) return err("Informe entre 2 e 480 parcelas.");
     const v = parseMoney($("iValor").value);
@@ -872,14 +933,20 @@ dialog[open]{animation:up .22s ease-out}
     const tipo = $("iTipo").value;
     if (editId){
       const d = state.dividas.find(x=>x.id===editId);
-      d.nome=nome; d.tipo=tipo; d.parcelas=n; d.valorParcela=valorParcela;
+      const eraFixa = isRec(d);
+      d.nome=nome; d.tipo=tipo; d.parcelas=n; d.valorParcela=valorParcela; d.recorrente=fixa;
       const mudouData = d.primeiro!==venc; d.primeiro=venc;
+      if (fixa){
+        if (mudouData || !eraFixa){ d.pagas=[]; d.valores={}; }
+        persist(); render(); $("dDebt").close(); toast("Alterações salvas"); return;
+      }
+      delete d.valores; delete d.fim;
       d.pagas = d.pagas.filter(i=>i<n);
       if (parc && pagasN!==d.pagas.length){ d.pagas = Array.from({length:pagasN},(_,i)=>i); }
       if (!parc && mudouData) d.pagas = d.pagas.filter(i=>i===0);
       toast("Alterações salvas");
     } else {
-      state.dividas.push({id:uid(), nome, tipo, parcelas:n, valorParcela, primeiro:venc,
+      state.dividas.push({id:uid(), nome, tipo, parcelas:n, valorParcela, primeiro:venc, recorrente:fixa,
         pagas: parc ? Array.from({length:pagasN},(_,i)=>i) : [], criado:Date.now()});
       toast("Dívida salva");
     }
