@@ -143,7 +143,7 @@ dialog::backdrop{background:rgba(8,20,17,.55)}
   dialog{margin:auto 0 0;width:100vw;max-width:100vw;max-height:92dvh;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
   .dlg::before{content:"";display:block;width:40px;height:5px;border-radius:99px;background:var(--line);margin:-8px auto 14px}
 }
-@media (max-width:380px){ .grid2{grid-template-columns:1fr !important} .fonte{grid-template-columns:1fr auto !important} .fonte .field:nth-child(2){grid-column:1} }
+@media (max-width:380px){ .grid2{grid-template-columns:1fr !important} }
 input[type=date]{min-height:48px;-webkit-appearance:none;appearance:none}
 .field input,.field select{min-width:0;min-height:48px}
 dialog[open]{animation:up .22s ease-out}
@@ -164,6 +164,10 @@ dialog[open]{animation:up .22s ease-out}
 .calc b{color:var(--ink)}
 .fonte{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;padding:12px;background:var(--surface-2);border-radius:var(--radius);margin-bottom:10px}
 .fonte .field{margin:0}
+.fonte .f-nome{grid-column:1/3}
+.fonte .f-data{grid-column:2/4}
+.row.ent{grid-template-columns:1fr auto;padding-left:14px;cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}
+.ent-note{font-size:.85rem;color:var(--gold);font-weight:600;margin:0 0 8px}
 .fonte input{background:var(--surface)}
 .fonte .rm{border:0;background:transparent;color:var(--danger);width:40px;height:46px;border-radius:8px;font-size:1.4rem;line-height:1}
 .fonte .rm:hover{background:var(--danger-soft)}
@@ -267,6 +271,12 @@ dialog[open]{animation:up .22s ease-out}
   </div>
 
   <div class="alert" id="alert" role="status"></div>
+
+  <section aria-labelledby="hEnt">
+    <div class="sec-h"><h2 id="hEnt">Entradas do mês</h2><small id="entResumo"></small></div>
+    <p class="ent-note" id="entNote" hidden></p>
+    <div class="list" id="entList"></div>
+  </section>
 
   <section aria-labelledby="hMes">
     <div class="sec-h"><h2 id="hMes">Contas do mês</h2><small id="mesResumo"></small></div>
@@ -397,9 +407,10 @@ dialog[open]{animation:up .22s ease-out}
 <dialog id="dSal">
   <form class="dlg" id="fSal" novalidate>
     <h2 id="salTitle">Salários</h2>
-    <p class="sub">Informe quanto entrou neste mês, já com os descontos. Cada mês guarda os seus próprios valores.</p>
+    <p class="sub">Informe o valor líquido e a data em que caiu na conta. Cada recebimento entra no mês da sua data.</p>
     <div id="fontes"></div>
-    <button type="button" class="addf" id="addFonte">+ Adicionar outro salário</button>
+    <datalist id="nomesSal"></datalist>
+    <button type="button" class="addf" id="addFonte">+ Adicionar recebimento</button>
     <div class="salsum"><span>Total do mês</span><span id="salTotal">R$ 0,00</span></div>
     <p class="err" id="errSal"></p>
     <div class="actions">
@@ -446,7 +457,7 @@ dialog[open]{animation:up .22s ease-out}
   const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
-  let state = {salario:0, fontes:[], rendaMes:{}, metaPct:15, cofre:0, cofreMov:[], dividas:[]};
+  let state = {salario:0, fontes:[], rendaMes:{}, receb:[], metaPct:15, cofre:0, cofreMov:[], dividas:[]};
   let view = (()=>{const d=new Date();return {y:d.getFullYear(),m:d.getMonth()}})();
   let filtro = "Todos";
   let dbRef = null;
@@ -503,6 +514,14 @@ dialog[open]{animation:up .22s ease-out}
     o.rendaMes = (o.rendaMes && typeof o.rendaMes==="object") ? JSON.parse(JSON.stringify(o.rendaMes)) : {};
     if (!o.fontes.length && o.salario>0) o.fontes = [{id:uid(), nome:"Salário 1", padrao:o.salario}];
     if (typeof o.metaPct!=="number" || !isFinite(o.metaPct)) o.metaPct = 15;
+    if (!Array.isArray(o.receb)){
+      o.receb = [];
+      for (const k of Object.keys(o.rendaMes)) for (const fid of Object.keys(o.rendaMes[k]||{})){
+        const v=o.rendaMes[k][fid], f=o.fontes.find(x=>x.id===fid);
+        if (v>0) o.receb.push({id:uid(), nome:f?f.nome:"Salário", valor:v, data:k+"-05"});
+      }
+      if (!o.receb.length){ const t=new Date(); o.fontes.forEach(f=>{ if (f.padrao>0) o.receb.push({id:uid(), nome:f.nome, valor:f.padrao, data:ym(t.getFullYear(),t.getMonth())+"-05"}); }); }
+    } else o.receb = o.receb.filter(r=>r && r.data).map(r=>({...r}));
     return o;
   }
 
@@ -534,17 +553,17 @@ dialog[open]{animation:up .22s ease-out}
 
   /* ---------- salários ---------- */
   const ym = (y,m) => `${y}-${String(m+1).padStart(2,"0")}`;
-  function valorFonte(f,y,m){
-    const key=ym(y,m), rm=state.rendaMes;
-    if (rm[key] && rm[key][f.id]!=null) return {v:rm[key][f.id], est:false};
-    const prev = Object.keys(rm).filter(k=>k<key && rm[k] && rm[k][f.id]!=null).sort().pop();
-    if (prev) return {v:rm[prev][f.id], est:true};
-    return {v:f.padrao||0, est:true};
-  }
+  const shiftData = (d,y,m) => { const dia=Number(d.slice(8,10))||1, last=new Date(y,m+1,0).getDate(); return `${ym(y,m)}-${String(Math.min(dia,last)).padStart(2,"0")}`; };
+  const porData = (a,b) => a.data<b.data?-1:a.data>b.data?1:0;
+  function recebDoMes(y,m){ const k=ym(y,m); return state.receb.filter(r=>r.data && r.data.slice(0,7)===k).sort(porData); }
   function rendaTotal(y,m){
-    let total=0, est=false;
-    for (const f of state.fontes){ const r=valorFonte(f,y,m); total+=r.v; if (r.est && r.v>0) est=true; }
-    return {total, est};
+    let lista = recebDoMes(y,m), est=false, base=null;
+    if (!lista.length){
+      const k=ym(y,m);
+      base = [...new Set(state.receb.map(r=>r.data.slice(0,7)))].filter(x=>x<k).sort().pop() || null;
+      if (base){ est=true; lista = state.receb.filter(r=>r.data.slice(0,7)===base).map(r=>({...r, data:shiftData(r.data,y,m)})).sort(porData); }
+    }
+    return {total: lista.reduce((s,r)=>s+r.valor,0), est: est && lista.length>0, lista, base};
   }
   const nomeMes = (y,m) => new Date(y,m,1).toLocaleDateString("pt-BR",{month:"long"});
 
@@ -567,8 +586,15 @@ dialog[open]{animation:up .22s ease-out}
     $("legPct").textContent = renda>0 ? Math.round(pct)+"% dos salários" : "";
     $("vSal").textContent = fmt(renda);
     const sh = $("salHint");
-    sh.textContent = !state.fontes.length ? "Toque para informar" : rt.est ? "Confirme os valores do mês" : "Toque para alterar";
-    sh.classList.toggle("warn", rt.est || !state.fontes.length);
+    sh.textContent = !rt.lista.length ? "Toque para informar" : rt.est ? "Previsto, confirme ao receber" : "Toque para alterar";
+    sh.classList.toggle("warn", rt.est || !rt.lista.length);
+    const el = $("entList"), en = $("entNote");
+    $("entResumo").textContent = rt.lista.length ? fmt(rt.total) : "";
+    en.hidden = !rt.est;
+    if (rt.est){ const [by,bm]=rt.base.split("-").map(Number); en.textContent = `Previsão com base em ${nomeMes(by,bm-1)}. Toque para informar o que realmente caiu.`; }
+    el.innerHTML = rt.lista.length
+      ? rt.lista.map(x=>`<button class="row ent" data-sal="1" style="${rt.est?"opacity:.7;border-style:dashed":""}"><div><div class="nm">${esc(x.nome)}</div><div class="meta"><span>${rt.est?"Previsto para":"Recebido em"} ${dfmtY(new Date(...x.data.split("-").map((n,i)=>i===1?n-1:Number(n))))}</span></div></div><div class="amt">${fmt(x.valor)}</div></button>`).join("")
+      : `<div class="empty">Nenhum salário informado neste mês.<br><button class="btn primary" data-sal="1">Informar salários</button></div>`;
     $("vCofre").textContent = fmt(state.cofre);
 
     const late = lateList();
@@ -820,6 +846,7 @@ dialog[open]{animation:up .22s ease-out}
       persist(); render(); return;
     }
     const ed = e.target.closest("[data-edit]"); if (ed){ openDebt(ed.dataset.edit); return; }
+    if (e.target.closest("[data-sal]")){ $("tileSal").click(); return; }
     const vb = e.target.closest("[data-val]");
     if (vb){
       const d = state.dividas.find(x=>x.id===vb.dataset.val); const i=Number(vb.dataset.i);
@@ -960,18 +987,23 @@ dialog[open]{animation:up .22s ease-out}
     $("salTotal").textContent = fmt(t);
   }
   function drawFontes(){
+    $("nomesSal").innerHTML = [...new Set(state.receb.map(r=>r.nome))].map(n=>`<option value="${esc(n)}">`).join("");
     $("fontes").innerHTML = draft.map((f,k)=>`<div class="fonte">
-      <div class="field"><label for="fn${k}">Nome</label><input id="fn${k}" data-n="${k}" value="${esc(f.nome)}" maxlength="30" autocomplete="off"></div>
-      <div class="field"><label for="fv${k}">Valor recebido</label><input id="fv${k}" data-val="${k}" inputmode="decimal" placeholder="0,00" value="${esc(f.valor)}" autocomplete="off"></div>
+      <div class="field f-nome"><label for="fn${k}">Nome</label><input id="fn${k}" data-n="${k}" value="${esc(f.nome)}" maxlength="30" autocomplete="off" list="nomesSal"></div>
       <button type="button" class="rm" data-rm="${k}" aria-label="Remover ${esc(f.nome)}">×</button>
-      ${f.est?'<span class="est">Repetido do mês anterior. Confirme ou altere.</span>':""}
+      <div class="field"><label for="fv${k}">Valor recebido</label><input id="fv${k}" data-val="${k}" inputmode="decimal" placeholder="0,00" value="${esc(f.valor)}" autocomplete="off"></div>
+      <div class="field f-data"><label for="fd${k}">Data do recebimento</label><input id="fd${k}" data-dt="${k}" type="date" value="${esc(f.data)}"></div>
+      ${f.est?'<span class="est">Previsto pelo mês anterior. Confirme o valor e a data.</span>':""}
     </div>`).join("");
     sumSal();
   }
   $("fontes").addEventListener("input", e=>{
-    const n=e.target.dataset.n, v=e.target.dataset.val;
+    const n=e.target.dataset.n, v=e.target.dataset.val, d=e.target.dataset.dt;
     if (n!=null) draft[n].nome = e.target.value;
-    if (v!=null){ draft[v].valor = e.target.value; if (draft[v].est){ draft[v].est=false; const t=e.target.closest(".fonte").querySelector(".est"); if(t) t.remove(); } }
+    if (d!=null) draft[d].data = e.target.value;
+    const k = v!=null ? v : d;
+    if (v!=null) draft[v].valor = e.target.value;
+    if (k!=null && draft[k].est){ draft[k].est=false; const t=e.target.closest(".fonte").querySelector(".est"); if(t) t.remove(); }
     sumSal();
   });
   $("fontes").addEventListener("click", e=>{
@@ -979,35 +1011,36 @@ dialog[open]{animation:up .22s ease-out}
     draft.splice(Number(b.dataset.rm),1); drawFontes();
   });
   $("addFonte").onclick = ()=>{
-    draft.push({id:uid(), nome:"Salário "+(draft.length+1), valor:"", est:false});
+    draft.push({id:uid(), nome:"Salário "+(draft.length+1), valor:"", data:salKey+"-05", est:false});
     drawFontes(); $("fv"+(draft.length-1)).focus();
   };
   $("tileSal").onclick = ()=>{
     salKey = ym(view.y,view.m);
-    draft = state.fontes.map(f=>{ const r=valorFonte(f,view.y,view.m); return {id:f.id, nome:f.nome, valor:moneyIn(r.v), est:r.est && r.v>0}; });
-    if (!draft.length) draft = [{id:uid(),nome:"Salário 1",valor:"",est:false},{id:uid(),nome:"Salário 2",valor:"",est:false}];
+    const rt = rendaTotal(view.y,view.m);
+    draft = rt.lista.map(r=>({id:rt.est?uid():r.id, nome:r.nome, valor:moneyIn(r.valor), data:r.data, est:rt.est}));
+    if (!draft.length) draft = [{id:uid(),nome:"Salário 1",valor:"",data:salKey+"-05",est:false},{id:uid(),nome:"Salário 2",valor:"",data:salKey+"-20",est:false}];
     $("salTitle").textContent = "Salários de "+nomeMes(view.y,view.m)+" "+view.y;
     $("errSal").textContent="";
     drawFontes(); $("dSal").showModal();
   };
   $("fSal").addEventListener("submit", e=>{
     e.preventDefault();
-    const vals=[];
+    const err = m => $("errSal").textContent = m;
+    const novos=[];
     for (const f of draft){
-      if (!f.nome.trim()) { $("errSal").textContent="Dê um nome para cada salário."; return; }
-      const v = f.valor.trim()==="" ? 0 : parseMoney(f.valor);
-      if (!(v>=0)) { $("errSal").textContent=`Valor inválido em “${f.nome.trim()}”. Use o formato 2.500,00.`; return; }
-      vals.push(v);
+      if (f.valor.trim()==="") continue;
+      if (!f.nome.trim()) return err("Dê um nome para cada recebimento.");
+      const v = parseMoney(f.valor);
+      if (!(v>0)) return err(`Valor inválido em “${f.nome.trim()}”. Use o formato 2.500,00.`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(f.data||"")) return err(`Escolha a data de recebimento de “${f.nome.trim()}”.`);
+      novos.push({id:f.id, nome:f.nome.trim(), valor:Math.round(v*100)/100, data:f.data});
     }
-    const ids = new Set(draft.map(f=>f.id));
-    for (const k of Object.keys(state.rendaMes)){
-      for (const id of Object.keys(state.rendaMes[k])) if (!ids.has(id)) delete state.rendaMes[k][id];
-    }
-    state.fontes = draft.map((f,i)=>{ const old=state.fontes.find(x=>x.id===f.id); return {id:f.id, nome:f.nome.trim(), padrao: old ? old.padrao : vals[i]}; });
-    state.rendaMes[salKey] = {};
-    draft.forEach((f,i)=>{ state.rendaMes[salKey][f.id] = Math.round(vals[i]*100)/100; });
+    state.receb = state.receb.filter(r=>r.data.slice(0,7)!==salKey).concat(novos);
     state.salario = rendaTotal(view.y,view.m).total;
-    persist(); render(); $("dSal").close(); toast("Salários salvos");
+    const fora = novos.filter(r=>r.data.slice(0,7)!==salKey);
+    persist(); render(); $("dSal").close();
+    if (fora.length){ const [fy,fm]=fora[0].data.split("-").map(Number); toast(`Salvo. ${fora.length===1?"1 recebimento foi":fora.length+" recebimentos foram"} para ${nomeMes(fy,fm-1)}`); return; }
+    toast("Salários salvos");
   });
 
   /* ---------- cofre ---------- */
