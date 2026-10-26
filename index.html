@@ -178,6 +178,12 @@ dialog[open]{animation:up .22s ease-out}
 .sum-r small.ok{color:var(--ok);font-weight:600}
 .chev{width:20px;height:20px;color:var(--ink-2);transition:transform .2s}
 .save[open] .chev{transform:rotate(180deg)}
+.fold{margin-top:10px}
+.save-sum .t{font-family:"Bricolage Grotesque",sans-serif;font-size:1rem;font-weight:700;color:var(--ink);white-space:nowrap}
+.fold .list .row{box-shadow:none}
+.sum-r small.bad{color:var(--danger);font-weight:600}
+.sum-r small.warnc{color:var(--gold);font-weight:600}
+@media (prefers-reduced-motion:reduce){.chev{transition:none}}
 .save-body{padding:0 14px 14px;border-top:1px solid var(--line);padding-top:12px}
 .save-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .save .t{font-size:.86rem;color:var(--ink-2)}
@@ -326,16 +332,28 @@ dialog[open]{animation:up .22s ease-out}
     </div>
   </details>
 
-  <section aria-labelledby="hEnt">
-    <div class="sec-h"><h2 id="hEnt">Entradas do mês</h2><small id="entResumo"></small></div>
-    <p class="ent-note" id="entNote" hidden></p>
-    <div class="list" id="entList"></div>
-  </section>
+  <details class="save fold" id="foldEnt" data-key="mc-ent-open">
+    <summary class="save-sum">
+      <span class="t">Entradas do mês</span>
+      <span class="sum-r"><b id="entTot">R$ 0,00</b><small id="entResumo"></small></span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </summary>
+    <div class="save-body">
+      <p class="ent-note" id="entNote" hidden></p>
+      <div class="list" id="entList"></div>
+    </div>
+  </details>
 
-  <section aria-labelledby="hMes">
-    <div class="sec-h"><h2 id="hMes">Contas do mês</h2><small id="mesResumo"></small></div>
-    <div class="list" id="mesList"></div>
-  </section>
+  <details class="save fold" id="foldMes" data-key="mc-mes-open">
+    <summary class="save-sum">
+      <span class="t">Contas do mês</span>
+      <span class="sum-r"><b id="mesTot">R$ 0,00</b><small id="mesResumo"></small></span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </summary>
+    <div class="save-body">
+      <div class="list" id="mesList"></div>
+    </div>
+  </details>
 
   </div>
 
@@ -645,7 +663,9 @@ dialog[open]{animation:up .22s ease-out}
     sh.textContent = !rt.lista.length ? "Toque para informar" : rt.est ? "Previsto, confirme ao receber" : "Toque para alterar";
     sh.classList.toggle("warn", rt.est || !rt.lista.length);
     const el = $("entList"), en = $("entNote");
-    $("entResumo").textContent = rt.lista.length ? fmt(rt.total) : "";
+    $("entTot").textContent = fmt(rt.total);
+    $("entResumo").textContent = !rt.lista.length ? "nenhuma lançada" : rt.est ? "previsto" : (rt.lista.length===1 ? "1 recebimento" : rt.lista.length+" recebimentos");
+    $("entResumo").className = rt.est ? "warnc" : "";
     en.hidden = !rt.est;
     if (rt.est){ const [by,bm]=rt.base.split("-").map(Number); en.textContent = `Previsão com base em ${nomeMes(by,bm-1)}. Toque para informar o que realmente caiu.`; }
     el.innerHTML = rt.lista.length
@@ -661,7 +681,10 @@ dialog[open]{animation:up .22s ease-out}
       al.classList.add("on");
     } else al.classList.remove("on");
 
-    $("mesResumo").textContent = items.length ? `${fmt(pagoMes)} pagos de ${fmt(totalMes)}` : "";
+    $("mesTot").textContent = fmt(totalMes);
+    { const t0=today0(), atr=items.filter(x=>!x.paid && x.due<t0).length, pg=items.filter(x=>x.paid).length, mr=$("mesResumo");
+      mr.textContent = !items.length ? "nenhuma conta" : atr ? (atr===1?"1 atrasada":atr+" atrasadas")+` · ${pg} de ${items.length} pagas` : pg===items.length ? "✓ todas pagas" : `${pg} de ${items.length} pagas`;
+      mr.className = atr ? "bad" : (items.length && pg===items.length) ? "ok" : ""; }
     const ml = $("mesList");
     if (!items.length){
       ml.innerHTML = `<div class="empty">Nenhuma conta vence neste mês.</div>`;
@@ -779,6 +802,10 @@ dialog[open]{animation:up .22s ease-out}
     persist(); render();
   }
   try { if (localStorage.getItem("mc-save-open")==="1") $("saveCard").open = true; } catch(_){}
+  document.querySelectorAll(".fold").forEach(d=>{
+    try { d.open = localStorage.getItem(d.dataset.key)==="1"; } catch(_){}
+    d.addEventListener("toggle", ()=>{ try { localStorage.setItem(d.dataset.key, d.open?"1":"0"); } catch(_){} });
+  });
   $("saveCard").addEventListener("toggle", ()=>{ try { localStorage.setItem("mc-save-open", $("saveCard").open?"1":"0"); } catch(_){} });
   $("sMinus").onclick = ()=>setPctMes(pctDoMes(view.y,view.m)-1);
   $("sPlus").onclick = ()=>setPctMes(pctDoMes(view.y,view.m)+1);
