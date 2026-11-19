@@ -77,6 +77,16 @@ h1,h2,.num{font-family:"Bricolage Grotesque","Figtree",system-ui,sans-serif}
 .meter{height:12px;border-radius:99px;background:rgba(255,255,255,.22);overflow:hidden;display:flex}
 .meter i{display:block;height:100%;background:var(--gold);border-radius:99px;transition:width .5s ease}
 .hero .legend{display:flex;justify-content:space-between;gap:10px;font-size:.88rem;margin-top:8px;opacity:.92}
+.hero .falta{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.25);font-size:.95rem}
+.hero .falta span{opacity:.9}
+.hero .falta b{font-family:"Bricolage Grotesque",sans-serif;font-size:1.25rem;font-weight:800;white-space:nowrap}
+.mes-falta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 12px}
+.mes-falta div{background:var(--surface-2);border-radius:var(--radius-sm);padding:9px 12px}
+.mes-falta span{display:block;font-size:.8rem;color:var(--ink-2)}
+.mes-falta b{font-family:"Bricolage Grotesque",sans-serif;font-size:1.08rem}
+.mes-falta .pg b{color:var(--ok)}
+.mes-falta .ft b{color:var(--danger)}
+.mes-falta .ft.zero b{color:var(--ok)}
 
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 0}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;text-align:left;display:flex;flex-direction:column;gap:2px}
@@ -332,6 +342,7 @@ dialog[open]{animation:up .22s ease-out}
     <p class="big num" id="sobra">R$ 0,00</p>
     <div class="meter" aria-hidden="true"><i id="meterUsed" style="width:0%"></i></div>
     <div class="legend"><span id="legUsed">Contas: R$ 0,00</span><span id="legPct">0% do salário</span></div>
+    <div class="falta" id="heroFalta" hidden><span id="faltaLbl">Falta pagar no mês</span><b id="faltaMes">R$ 0,00</b></div>
   </div>
 
   <div class="tiles">
@@ -394,6 +405,10 @@ dialog[open]{animation:up .22s ease-out}
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
     </summary>
     <div class="save-body">
+      <div class="mes-falta" id="mesFalta" hidden>
+        <div class="pg"><span id="mfPgLbl">Já pago</span><b id="mfPg">R$ 0,00</b></div>
+        <div class="ft" id="mfFtBox"><span id="mfFtLbl">Falta pagar</span><b id="mfFt">R$ 0,00</b></div>
+      </div>
       <div class="chips" id="mesChips" role="group" aria-label="Filtrar por responsável"></div>
       <div class="list" id="mesList"></div>
     </div>
@@ -729,6 +744,11 @@ dialog[open]{animation:up .22s ease-out}
     const items = installmentsIn(view.y,view.m);
     const totalMes = items.reduce((s,x)=>s+x.v,0);
     const pagoMes = items.filter(x=>x.paid).reduce((s,x)=>s+x.v,0);
+    // Quanto falta pagar no mês (contas ainda não marcadas como pagas)
+    { const falta = Math.max(0, totalMes - pagoMes), nAbertas = items.filter(x=>!x.paid).length;
+      $("heroFalta").hidden = !items.length;
+      $("faltaLbl").textContent = nAbertas ? `Falta pagar no mês (${nAbertas===1?"1 conta":nAbertas+" contas"})` : "Contas do mês";
+      $("faltaMes").textContent = nAbertas ? fmt(falta) : "✓ tudo pago"; }
     const rt = rendaTotal(view.y,view.m), renda = rt.total;
     const sobra = renda - totalMes;
     $("sobra").textContent = fmt(sobra);
@@ -769,6 +789,11 @@ dialog[open]{animation:up .22s ease-out}
     const ml = $("mesList");
     const mItems = items.filter(x=>daQuem(x.d));
     $("mesChips").innerHTML = items.length ? quemChips(items, x=>x.v) : "";
+    { const pg = mItems.filter(x=>x.paid).reduce((s,x)=>s+x.v,0), ft = mItems.filter(x=>!x.paid).reduce((s,x)=>s+x.v,0), de = quem==="Todos" ? "" : " · "+quem;
+      $("mesFalta").hidden = !mItems.length;
+      $("mfPgLbl").textContent = "Já pago"+de; $("mfPg").textContent = fmt(pg);
+      $("mfFtLbl").textContent = "Falta pagar"+de; $("mfFt").textContent = ft>0.005 ? fmt(ft) : "✓ nada";
+      $("mfFtBox").classList.toggle("zero", ft<=0.005); }
     if (!items.length){
       ml.innerHTML = `<div class="empty">Nenhuma conta vence neste mês.</div>`;
     } else {
@@ -872,7 +897,7 @@ dialog[open]{animation:up .22s ease-out}
     $("calChips").innerHTML = all.length ? quemChips(all, x=>x.v) : "";
     const tot = items.reduce((s,x)=>s+x.v,0), pg = items.filter(x=>x.paid).reduce((s,x)=>s+x.v,0);
     $("calMesTxt").textContent = items.length ? (items.length===1?"1 conta":items.length+" contas")+(quem==="Todos"?"":" de "+quem) : "Nenhuma conta"+(quem==="Todos"?"":" de "+quem);
-    $("calMesTot").innerHTML = items.length ? `<b>${fmt(tot)}</b>${pg>0?` · pago ${fmt(pg)}`:""}` : "";
+    $("calMesTot").innerHTML = items.length ? `<b>${fmt(tot)}</b>${tot-pg>0.005?` · falta ${fmt(tot-pg)}`:" · ✓ tudo pago"}` : "";
     let h = "";
     for (let i=0;i<off;i++) h += `<span class="day blank" aria-hidden="true"></span>`;
     const mesNome = nomeMes(y,m);
