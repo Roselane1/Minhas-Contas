@@ -315,6 +315,26 @@ dialog[open]{animation:up .22s ease-out}
 .cal-sub{font-size:.95rem;font-weight:700;margin:14px 0 8px;color:var(--ink-2)}
 @media (max-width:360px){.day{min-height:52px}.day .dv{font-size:.6rem}}
 .linkbtn{display:block;margin:14px auto 0;border:0;background:none;color:var(--ink-2);text-decoration:underline;font-size:.92rem;padding:8px}
+
+/* Código de acesso */
+.pin-box{text-align:center;max-width:330px}
+.pin-box .sub{margin:6px 0 16px;min-height:2.9em}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin:0 0 10px;min-height:18px}
+.pin-dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--ink-2);transition:background .12s,border-color .12s}
+.pin-dots i.on{background:var(--brand);border-color:var(--brand)}
+.pin-dots.shake{animation:shake .35s}
+@keyframes shake{0%,100%{transform:none}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.pin-box .err{text-align:center;margin:0 0 10px;min-height:1.3em}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:280px;margin:0 auto}
+.pad button{height:64px;border-radius:20px;border:1px solid var(--line);background:var(--surface);font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:1.55rem;color:var(--ink);display:grid;place-items:center;padding:0}
+.pad button:active{background:var(--surface-2);transform:scale(.97)}
+.pad button.fn{background:transparent;border-color:transparent;color:var(--ink-2)}
+.pad button.ok{background:var(--brand);color:var(--brand-ink);border-color:transparent}
+.pad button svg{width:26px;height:26px}
+.pad:has(button:disabled){opacity:.55}
+.lembrar{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;font-size:.95rem;color:var(--ink-2);cursor:pointer}
+.lembrar input{width:20px;height:20px;accent-color:var(--brand);margin:0}
+@media (prefers-reduced-motion:reduce){.pin-dots.shake{animation:none}}
 </style>
 </head>
 <body>
@@ -492,24 +512,31 @@ dialog[open]{animation:up .22s ease-out}
   <div class="foot">
     <button class="ghost" id="btnExport">Exportar backup</button>
     <button class="ghost" id="btnImport">Importar backup</button>
-    <button class="ghost danger" id="btnSair">Sair da conta</button>
+    <button class="ghost" id="btnTrocar">Trocar código</button>
+    <button class="ghost danger" id="btnSair">Bloquear app</button>
     <input type="file" id="fileImport" accept="application/json,.json" hidden>
   </div>
 </div>
 
 
 <div class="login" id="login" hidden>
-  <form class="login-box" id="fLogin" novalidate>
+  <div class="login-box pin-box">
     <img src="icon-192.png" alt="" width="72" height="72">
-    <h1>Minhas contas</h1>
-    <p class="sub">Entre para ver suas contas em qualquer aparelho.</p>
-    <div class="field"><label for="lEmail">E-mail</label><input id="lEmail" type="email" autocomplete="email" inputmode="email"></div>
-    <div class="field"><label for="lSenha">Senha</label><input id="lSenha" type="password" autocomplete="current-password"></div>
-    <p class="err" id="lErr"></p>
-    <button type="submit" class="btn primary" style="width:100%">Entrar</button>
-    <button type="button" class="btn plain" id="lCriar" style="width:100%;margin-top:6px">Criar conta</button>
-    <button type="button" class="linkbtn" id="lEsqueci">Esqueci a senha</button>
-  </form>
+    <h1 id="pTit">Minhas contas</h1>
+    <p class="sub" id="pSub" aria-live="polite">Digite o código de acesso</p>
+    <div class="pin-dots" id="pDots" role="img" aria-label="Nenhum número digitado"></div>
+    <p class="err" id="lErr" role="alert"></p>
+    <div class="pad" id="pad">
+      <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
+      <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
+      <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+      <button type="button" data-k="del" class="fn" aria-label="Apagar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/></svg></button>
+      <button type="button" data-k="0">0</button>
+      <button type="button" data-k="ok" class="ok" aria-label="Confirmar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+    </div>
+    <label class="lembrar" id="pLembrarBox"><input type="checkbox" id="pLembrar"> Lembrar neste aparelho</label>
+    <button type="button" class="linkbtn" id="pAlt">Primeiro acesso? Criar código</button>
+  </div>
 </div>
 <button class="fab" id="fab"><span aria-hidden="true">+</span> Nova dívida</button>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1399,6 +1426,96 @@ dialog[open]{animation:up .22s ease-out}
   const usarNuvem = !!(cfg.apiKey && cfg.projectId && window.firebase);
   const login = $("login");
 
+  /* ---------- tela do código de acesso ---------- */
+  const handlers = {};
+  const pin = (()=>{
+    let modo="entrar", passo=0, dig="", primeiro="", atual="", ocupado=false, migrar=false;
+    const LEN_KEY="mc-code-len";
+    const lenConhecido = ()=>{ try{ return Number(localStorage.getItem(LEN_KEY))||0; }catch(_){ return 0; } };
+    const T = {
+      entrar:["Digite o código de acesso"],
+      criar:["Crie um código de 4 a 8 números","Digite o código de novo para confirmar"],
+      trocar:["Digite o código atual","Digite o novo código (4 a 8 números)","Digite o novo código de novo"]
+    };
+    const pedeAtual = () => modo==="entrar" || (modo==="trocar" && passo===0);
+    const sub = t => $("pSub").textContent = (migrar && modo==="criar" ? "Agora o app abre com um código. Suas contas atuais vão junto. " : "") + t;
+    function desenhar(){
+      const L = pedeAtual() ? lenConhecido() : 0;
+      const n = Math.max(L || 4, dig.length);
+      $("pDots").innerHTML = Array.from({length:n},(_,i)=>`<i class="${i<dig.length?"on":""}"></i>`).join("");
+      $("pDots").setAttribute("aria-label", dig.length ? (dig.length===1?"1 número digitado":dig.length+" números digitados") : "Nenhum número digitado");
+    }
+    function setBusy(b){ ocupado=b; $("pad").querySelectorAll("button").forEach(x=>x.disabled=b); }
+    function abrir(m, opt={}){
+      modo=m; passo=0; dig=""; primeiro=""; atual=""; migrar=!!opt.migrar;
+      $("pTit").textContent = m==="criar" ? "Criar código de acesso" : m==="trocar" ? "Trocar código" : "Minhas contas";
+      sub(T[m][0]);
+      $("pLembrarBox").hidden = m==="trocar";
+      try{ $("pLembrar").checked = localStorage.getItem("mc-lembrar")==="1"; }catch(_){}
+      $("pAlt").textContent = m==="entrar" ? "Primeiro acesso? Criar código" : m==="criar" ? "Já tenho um código" : "Cancelar";
+      $("lErr").textContent = opt.msg || "";
+      setBusy(false); desenhar(); login.hidden=false;
+    }
+    function fechar(){ login.hidden=true; }
+    function erro(m){
+      $("lErr").textContent=m; dig=""; desenhar();
+      const d=$("pDots"); d.classList.remove("shake"); void d.offsetWidth; d.classList.add("shake");
+      if (navigator.vibrate) try{ navigator.vibrate(120); }catch(_){}
+    }
+    function tecla(k){
+      if (ocupado || login.hidden) return;
+      if (k==="del"){ dig=dig.slice(0,-1); desenhar(); return; }
+      if (k==="ok"){ confirmar(); return; }
+      if (dig.length>=8) return;
+      dig+=k; $("lErr").textContent=""; desenhar();
+      const L=lenConhecido();
+      if (L && dig.length===L && pedeAtual()) setTimeout(confirmar, 120);
+    }
+    function confirmar(){
+      if (ocupado) return;
+      if (dig.length<4) return erro("O código tem pelo menos 4 números.");
+      const c=dig, lembrar=$("pLembrar").checked;
+      if (modo==="entrar") return executar(()=>handlers.entrar(c, lembrar), c);
+      if (modo==="criar"){
+        if (passo===0){ primeiro=c; passo=1; dig=""; sub(T.criar[1]); desenhar(); return; }
+        if (c!==primeiro){ passo=0; primeiro=""; sub(T.criar[0]); return erro("Os códigos não conferem. Comece de novo."); }
+        return executar(()=>handlers.criar(c, lembrar), c);
+      }
+      if (passo===0){ atual=c; passo=1; dig=""; sub(T.trocar[1]); desenhar(); return; }
+      if (passo===1){ primeiro=c; passo=2; dig=""; sub(T.trocar[2]); desenhar(); return; }
+      if (c!==primeiro){ passo=1; primeiro=""; sub(T.trocar[1]); return erro("Os códigos não conferem. Digite o novo de novo."); }
+      return executar(()=>handlers.trocar(atual, c), c, true);
+    }
+    async function executar(fn, c, trocou){
+      setBusy(true); $("lErr").textContent=""; $("pSub").textContent = "Verificando…";
+      try{
+        await fn();
+        try{ localStorage.setItem(LEN_KEY, String(c.length)); }catch(_){}
+        if (trocou){ fechar(); toast("Código trocado"); }
+      }catch(x){
+        setBusy(false);
+        const code = x && x.code;
+        if (code==="auth/email-already-in-use") return abrir("entrar", {msg:handlers.msg(x)});
+        if (modo==="trocar"){
+          if (code==="auth/invalid-credential" || code==="auth/wrong-password"){ passo=0; sub(T.trocar[0]); return erro("Código atual incorreto."); }
+          sub(T.trocar[passo]);
+        } else if (modo==="criar"){ passo=0; primeiro=""; sub(T.criar[0]); }
+        else sub(T.entrar[0]);
+        erro(handlers.msg(x));
+      }
+    }
+    $("pad").addEventListener("click", e=>{ const b=e.target.closest("[data-k]"); if (b) tecla(b.dataset.k); });
+    document.addEventListener("keydown", e=>{
+      if (login.hidden) return;
+      if (/^\d$/.test(e.key)){ e.preventDefault(); tecla(e.key); }
+      else if (e.key==="Backspace"){ e.preventDefault(); tecla("del"); }
+      else if (e.key==="Enter"){ e.preventDefault(); tecla("ok"); }
+    });
+    $("pLembrar").addEventListener("change", e=>{ try{ localStorage.setItem("mc-lembrar", e.target.checked?"1":"0"); }catch(_){} });
+    $("pAlt").onclick = ()=>{ if (modo==="entrar") abrir("criar", {migrar}); else if (modo==="criar") abrir("entrar"); else fechar(); };
+    return {abrir, fechar};
+  })();
+
   if (!usarNuvem){
     login.hidden = true;
     const local = readLocal();
@@ -1406,6 +1523,7 @@ dialog[open]{animation:up .22s ease-out}
     render();
     setSync("Dados salvos só neste aparelho");
     $("btnSair").hidden = true;
+    $("btnTrocar").hidden = true;
   } else {
     firebase.initializeApp(cfg);
     const auth = firebase.auth();
@@ -1413,46 +1531,54 @@ dialog[open]{animation:up .22s ease-out}
     fs.enablePersistence({synchronizeTabs:true}).catch(()=>{});
     let unsub = null;
 
-    const erroTxt = c => ({
-      "auth/invalid-email":"E-mail inválido.",
-      "auth/missing-password":"Digite a senha.",
-      "auth/weak-password":"A senha precisa ter pelo menos 6 caracteres.",
-      "auth/email-already-in-use":"Já existe uma conta com este e-mail. Use Entrar.",
-      "auth/invalid-credential":"E-mail ou senha incorretos.",
-      "auth/wrong-password":"E-mail ou senha incorretos.",
-      "auth/user-not-found":"Não existe conta com este e-mail. Use Criar conta.",
-      "auth/too-many-requests":"Muitas tentativas. Aguarde alguns minutos.",
-      "auth/network-request-failed":"Sem internet. Conecte-se e tente de novo."
-    })[c] || "Não foi possível entrar ("+c+").";
-    const lerCampos = () => [$("lEmail").value.trim(), $("lSenha").value];
-    const lErr = m => $("lErr").textContent = m;
+    // O código digitado funciona como a senha de uma conta fixa do app.
+    // Ninguém precisa cadastrar usuário no Firebase: o app cria essa conta no primeiro acesso.
+    const EMAIL_ACESSO = "acesso@minhas-contas.app";
+    const senhaDo = c => "mc#" + c + "#contas-casa";
+    const P = firebase.auth.Auth.Persistence;
+    const lembrarNoAparelho = l => auth.setPersistence(l ? P.LOCAL : P.SESSION);
+    let herdar = null; // dados da conta antiga (e-mail/senha), levados para o código
 
-    $("fLogin").addEventListener("submit", async e=>{
-      e.preventDefault(); lErr("");
-      const [em,se] = lerCampos();
-      try { await auth.signInWithEmailAndPassword(em,se); } catch(x){ lErr(erroTxt(x.code)); }
-    });
-    $("lCriar").onclick = async ()=>{
-      lErr("");
-      const [em,se] = lerCampos();
-      try { await auth.createUserWithEmailAndPassword(em,se); } catch(x){ lErr(erroTxt(x.code)); }
+    handlers.msg = x => ({
+      "auth/invalid-credential":"Código incorreto.",
+      "auth/wrong-password":"Código incorreto.",
+      "auth/user-not-found":"Ainda não existe código. Toque em “Primeiro acesso”.",
+      "auth/email-already-in-use":"Já existe um código criado. Digite-o para entrar.",
+      "auth/too-many-requests":"Muitas tentativas erradas. Aguarde alguns minutos.",
+      "auth/network-request-failed":"Sem internet. Conecte-se e tente de novo.",
+      "auth/requires-recent-login":"Bloqueie o app, entre de novo e depois troque o código.",
+      "auth/operation-not-allowed":"O acesso por e-mail/senha está desligado no Firebase."
+    })[x && x.code] || "Não foi possível continuar ("+((x && x.code) || "erro")+").";
+    handlers.entrar = async (c,l)=>{ await lembrarNoAparelho(l); await auth.signInWithEmailAndPassword(EMAIL_ACESSO, senhaDo(c)); };
+    handlers.criar  = async (c,l)=>{ await lembrarNoAparelho(l); await auth.createUserWithEmailAndPassword(EMAIL_ACESSO, senhaDo(c)); };
+    handlers.trocar = async (a,n)=>{
+      const u = auth.currentUser; if (!u) throw {code:"auth/requires-recent-login"};
+      await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(EMAIL_ACESSO, senhaDo(a)));
+      await u.updatePassword(senhaDo(n));
     };
-    $("lEsqueci").onclick = async ()=>{
-      const [em] = lerCampos();
-      if (!em) return lErr("Digite seu e-mail para receber o link.");
-      try { await auth.sendPasswordResetEmail(em); lErr(""); alert("Enviamos um link para "+em+" criar uma nova senha."); } catch(x){ lErr(erroTxt(x.code)); }
-    };
-    $("btnSair").onclick = ()=>{ if (confirm("Sair da conta neste aparelho?")) auth.signOut(); };
+
+    $("btnSair").onclick = ()=>auth.signOut();
+    $("btnTrocar").onclick = ()=>pin.abrir("trocar");
 
     auth.onAuthStateChanged(async u=>{
       if (unsub){ unsub(); unsub=null; }
-      if (!u){
+      if (u && u.email !== EMAIL_ACESSO){
+        // Conta antiga de e-mail/senha: guarda os dados e pede para criar o código.
+        try { const s = await fs.collection("usuarios").doc(u.uid).get(); if (s.exists) herdar = JSON.parse(JSON.stringify(s.data())); } catch(_){}
+        if (!herdar){ try { const r = localStorage.getItem("minhas-contas-"+u.uid); if (r) herdar = JSON.parse(r); } catch(_){} }
         dbRef = null;
-        state = normalize({});
-        login.hidden = false;
+        state = normalize({}); render();
+        pin.abrir("criar", {migrar:true});
         return;
       }
-      login.hidden = true;
+      if (!u){
+        dbRef = null;
+        state = normalize({}); render();
+        setSync("");
+        pin.abrir("entrar");
+        return;
+      }
+      pin.fechar();
       LS_KEY = "minhas-contas-"+u.uid;
       const local = readLocal();
       state = normalize(local);
@@ -1463,7 +1589,11 @@ dialog[open]{animation:up .22s ease-out}
       try{
         const snap = await ref.get();
         if (snap.exists){ state = normalize(JSON.parse(JSON.stringify(snap.data()))); writeLocal(); render(); setSync("Dados salvos na nuvem"); }
-        else flush();
+        else {
+          if (herdar){ state = normalize(herdar); writeLocal(); render(); toast("Suas contas foram levadas para o código"); }
+          flush();
+        }
+        herdar = null;
       }catch(_){ setSync("Sem conexão. Os dados ficam neste aparelho e sobem quando a internet voltar."); }
       unsub = ref.onSnapshot(s=>{
         if (!s.exists || saveT) return;
