@@ -1417,7 +1417,9 @@ dialog[open]{animation:up .22s ease-out}
       const data = JSON.parse(await f.text());
       if (!data || !Array.isArray(data.dividas)) throw 0;
       if (!confirm("Importar este backup? Os dados atuais serão substituídos.")) return;
-      state = normalize(data); persist(); render(); toast("Backup importado");
+      const ver = state.codeVer;
+      state = normalize(data); delete state.codeVer; if (ver) state.codeVer = ver;
+      persist(); render(); toast("Backup importado");
     }catch(_){ alert("Arquivo inválido. Escolha um backup exportado por este app."); }
   });
 
@@ -1539,6 +1541,29 @@ dialog[open]{animation:up .22s ease-out}
     const lembrarNoAparelho = l => auth.setPersistence(l ? P.LOCAL : P.SESSION);
     let herdar = null; // dados da conta antiga (e-mail/senha), levados para o código
 
+    // Versão do código: muda a cada troca. Aparelho com versão diferente perde o acesso.
+    const VER_KEY = "mc-code-ver";
+    const verLocal = () => { try { return localStorage.getItem(VER_KEY)||""; } catch(_){ return ""; } };
+    const setVerLocal = v => { try { localStorage.setItem(VER_KEY, v); } catch(_){} };
+    let acabouDeEntrar = false, expulso = false;
+    function expulsar(){
+      expulso = true;
+      try { localStorage.removeItem(LS_KEY); localStorage.removeItem(VER_KEY); } catch(_){}
+      auth.signOut();
+    }
+    function conferirVersao(){
+      if (acabouDeEntrar){
+        acabouDeEntrar = false;
+        if (!state.codeVer){ state.codeVer = uid(); persist(); }
+        setVerLocal(state.codeVer);
+        return true;
+      }
+      if (!state.codeVer){ state.codeVer = uid(); setVerLocal(state.codeVer); persist(); return true; }
+      if (verLocal() === state.codeVer) return true;
+      expulsar();
+      return false;
+    }
+
     handlers.msg = x => ({
       "auth/invalid-credential":"Código incorreto.",
       "auth/wrong-password":"Código incorreto.",
@@ -1549,12 +1574,21 @@ dialog[open]{animation:up .22s ease-out}
       "auth/requires-recent-login":"Bloqueie o app, entre de novo e depois troque o código.",
       "auth/operation-not-allowed":"O acesso por e-mail/senha está desligado no Firebase."
     })[x && x.code] || "Não foi possível continuar ("+((x && x.code) || "erro")+").";
-    handlers.entrar = async (c,l)=>{ await lembrarNoAparelho(l); await auth.signInWithEmailAndPassword(EMAIL_ACESSO, senhaDo(c)); };
-    handlers.criar  = async (c,l)=>{ await lembrarNoAparelho(l); await auth.createUserWithEmailAndPassword(EMAIL_ACESSO, senhaDo(c)); };
+    handlers.entrar = async (c,l)=>{
+      await lembrarNoAparelho(l); acabouDeEntrar = true;
+      try { await auth.signInWithEmailAndPassword(EMAIL_ACESSO, senhaDo(c)); } catch(x){ acabouDeEntrar = false; throw x; }
+    };
+    handlers.criar  = async (c,l)=>{
+      await lembrarNoAparelho(l); acabouDeEntrar = true;
+      try { await auth.createUserWithEmailAndPassword(EMAIL_ACESSO, senhaDo(c)); } catch(x){ acabouDeEntrar = false; throw x; }
+    };
     handlers.trocar = async (a,n)=>{
-      const u = auth.currentUser; if (!u) throw {code:"auth/requires-recent-login"};
+      const u = auth.currentUser; if (!u || !dbRef) throw {code:"auth/requires-recent-login"};
       await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(EMAIL_ACESSO, senhaDo(a)));
       await u.updatePassword(senhaDo(n));
+      // nova versão: todos os outros aparelhos são bloqueados
+      state.codeVer = uid(); setVerLocal(state.codeVer);
+      writeLocal(); clearTimeout(saveT); await dbRef.set(JSON.parse(JSON.stringify(state)));
     };
 
     $("btnSair").onclick = ()=>auth.signOut();
@@ -1575,7 +1609,8 @@ dialog[open]{animation:up .22s ease-out}
         dbRef = null;
         state = normalize({}); render();
         setSync("");
-        pin.abrir("entrar");
+        pin.abrir("entrar", {msg: expulso ? "O código foi trocado. Digite o código novo." : ""});
+        expulso = false;
         return;
       }
       pin.fechar();
@@ -1594,12 +1629,14 @@ dialog[open]{animation:up .22s ease-out}
           flush();
         }
         herdar = null;
+        if (!conferirVersao()) return;
       }catch(_){ setSync("Sem conexão. Os dados ficam neste aparelho e sobem quando a internet voltar."); }
       unsub = ref.onSnapshot(s=>{
         if (!s.exists || saveT) return;
         const novo = JSON.stringify(s.data());
         if (novo === JSON.stringify(state)) return;
         state = normalize(JSON.parse(novo));
+        if (!conferirVersao()) return;
         writeLocal(); render();
         if ($("dCofre").open) renderCofreHist();
       }, ()=>{});
